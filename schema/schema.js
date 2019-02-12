@@ -72,6 +72,15 @@ const UserType = new GraphQLObjectType({
 const RootQuery = new GraphQLObjectType({
     name: 'RootQueryType',
     fields: {
+        mygames: {
+            type: new GraphQLList(GameType),
+            args: {
+                userid: { type: GraphQLString }
+            },
+            resolve(parent, args) {
+                return Game.find({ $or: [{ 'ownerId': args.userid }, { 'guestId': args.userid }] });
+            }
+        },
         game: {
             type: GameType,
             args: {
@@ -115,7 +124,6 @@ const Mutation = new GraphQLObjectType({
             },
             resolve(parent, args) {
                 return new Promise((resolve, reject) => {
-                    find
                     let now = new Date().toISOString();
                     let newGame = new Game({
                         ownerId: args.userid,
