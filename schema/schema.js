@@ -81,6 +81,35 @@ const RootQuery = new GraphQLObjectType({
                 return Game.find({ $or: [{ 'ownerId': args.userid }, { 'guestId': args.userid }] });
             }
         },
+        availablegames: {
+            type: new GraphQLList(GameType),
+            args: {
+                userid: { type: GraphQLString }
+            },
+            resolve(parent, args) {
+                return Game.find({ $and: [{ 'ownerId': { $ne: args.userid } }, { 'guestId': null }] });
+            }
+        },
+        gameboard: {
+            type: GameType,
+            args: {
+                id: { type: GraphQLString },
+                userid: { type: GraphQLString }
+            },
+            resolve(parent, args) {
+                // { $or: [{ 'ownerId': args.userid }, { 'guestId': args.userid }] }, 
+                return Game.findOne({
+                    $and: [
+                        {
+                            $or: [
+                                { 'ownerId': args.userid },
+                                { 'guestId': args.userid }]
+                        },
+                        { '_id': args.id }
+                    ]
+                });
+            }
+        },
         game: {
             type: GameType,
             args: {
@@ -160,6 +189,24 @@ const Mutation = new GraphQLObjectType({
                     }).catch(errors => reject(errors));
                 })
             }
+        },
+        joingame: {
+            type: new GraphQLList(GameType),
+            args: {
+                userid: { type: new GraphQLNonNull(GraphQLID) },
+                id: { type: new GraphQLNonNull(GraphQLID) }
+            },
+            resolve(parent, args) {
+                return new Promise((resolve, reject) => {
+                    Game.findOneAndUpdate({ '_id': args.id }, { guestId: args.userid }, { new: true }, (err, data) => {
+                        socket.publish('JOINED_GAME', {
+                            gameJoined: data
+                        });
+                        console.log(data.guestId);
+                        resolve(data);
+                    }).catch(errors => reject(errors));
+                })
+            }
         }
     }
 });
@@ -174,6 +221,10 @@ const Subscription = new GraphQLObjectType({
         gameAdded: {
             type: GameType,
             subscribe: () => socket.asyncIterator('ADD_GAME')
+        },
+        gameJoined: {
+            type: GameType,
+            subscribe: () => socket.asyncIterator('JOINED_GAME')
         }
     }
 });
