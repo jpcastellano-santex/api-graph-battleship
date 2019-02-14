@@ -149,7 +149,7 @@ const Mutation = new GraphQLObjectType({
         addGame: {
             type: GameType,
             args: {
-                userid: { type: new GraphQLNonNull(GraphQLID) }
+                userid: { type: new GraphQLNonNull(GraphQLString) }
             },
             resolve(parent, args) {
                 return new Promise((resolve, reject) => {
@@ -181,7 +181,6 @@ const Mutation = new GraphQLObjectType({
                         username: args.username
                     });
                     newUser.save().then(data => {
-                        console.log(data);
                         socket.publish('ADD_USER', {
                             userAdded: data
                         });
@@ -191,10 +190,10 @@ const Mutation = new GraphQLObjectType({
             }
         },
         joingame: {
-            type: new GraphQLList(GameType),
+            type: GameType,
             args: {
-                userid: { type: new GraphQLNonNull(GraphQLID) },
-                id: { type: new GraphQLNonNull(GraphQLID) }
+                userid: { type: new GraphQLNonNull(GraphQLString) },
+                id: { type: new GraphQLNonNull(GraphQLString) }
             },
             resolve(parent, args) {
                 return new Promise((resolve, reject) => {
@@ -202,10 +201,46 @@ const Mutation = new GraphQLObjectType({
                         socket.publish('JOINED_GAME', {
                             gameJoined: data
                         });
-                        console.log(data.guestId);
                         resolve(data);
                     }).catch(errors => reject(errors));
                 })
+            }
+        },
+        cellclick: {
+            type: GameType,
+            args: {
+                userid: { type: new GraphQLNonNull(GraphQLString) },
+                id: { type: new GraphQLNonNull(GraphQLString) },
+                row: { type: new GraphQLNonNull(GraphQLInt) },
+                col: { type: new GraphQLNonNull(GraphQLInt) }
+            },
+            resolve(parent, args) {
+                Game.findOne({ '_id': args.id }).exec().then(game => {
+                    var isOwner = game.ownerId === args.userid;
+                    var boardname = isOwner ? 'guestBoard' : 'ownerBoard';
+
+                    var cellValue = game[boardname][args.row][args.col];
+
+                    var newCellValue = GameBoard.cellStatus.WATER;
+                    if (cellValue === GameBoard.cellStatus.WATER) {
+                        newCellValue = GameBoard.cellStatus.MISS;
+                    } else {
+                        newCellValue = GameBoard.cellStatus.HITTED;
+                    }
+                    game[boardname][args.row][args.col] = newCellValue;
+
+                    var nextuser = isOwner ? game.guestId : game.ownerId;
+                    var updateObj = { turnId: nextuser };
+                    updateObj[boardname] = game[boardname];
+                    console.log(updateObj);
+
+                    Game.findOneAndUpdate({ '_id': game.id },
+                        updateObj, { new: true }, (err, doc) => {
+                            socket.publish('CELLCLICK_GAME', {
+                                gameClicked: doc
+                            });
+                        });
+                });
             }
         }
     }
@@ -225,6 +260,10 @@ const Subscription = new GraphQLObjectType({
         gameJoined: {
             type: GameType,
             subscribe: () => socket.asyncIterator('JOINED_GAME')
+        },
+        gameClicked: {
+            type: GameType,
+            subscribe: () => socket.asyncIterator('CELLCLICK_GAME')
         }
     }
 });
