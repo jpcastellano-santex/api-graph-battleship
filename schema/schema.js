@@ -197,7 +197,7 @@ const Mutation = new GraphQLObjectType({
             },
             resolve(parent, args) {
                 return new Promise((resolve, reject) => {
-                    Game.findOneAndUpdate({ '_id': args.id }, { guestId: args.userid }, { new: true }, (err, data) => {
+                    Game.findOneAndUpdate({ '_id': args.id }, { guestId: args.userid, startDate: new Date().toISOString() }, { new: true }, (err, data) => {
                         socket.publish('JOINED_GAME', {
                             gameJoined: data
                         });
