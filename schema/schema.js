@@ -78,7 +78,16 @@ const RootQuery = new GraphQLObjectType({
                 userid: { type: GraphQLString }
             },
             resolve(parent, args) {
-                return Game.find({ $or: [{ 'ownerId': args.userid }, { 'guestId': args.userid }] });
+                return Game.find({
+                    $and: [
+                        {
+                            $or: [
+                                { 'ownerId': args.userid },
+                                { 'guestId': args.userid }]
+                        },
+                        { 'winnerId': null }
+                    ]
+                });
             }
         },
         availablegames: {
@@ -244,12 +253,54 @@ const Mutation = new GraphQLObjectType({
                     var nextuser = isOwner ? game.guestId : game.ownerId;
                     var updateObj = { turnId: nextuser };
                     updateObj[boardname] = game[boardname];
-                    console.log(updateObj);
+
+                    var currentBoard = updateObj[boardname];
+                    var completed = true;
+
+                    for (let index = 0; index < currentBoard.length; index++) {
+                        const row = currentBoard[index];
+                        var incompleted = _.find(row, (o) => { return o > 0; });
+                        if (incompleted) {
+                            completed = false;
+                            break;
+                        }
+                    }
+
+                    if (completed) {
+                        updateObj.winnerId = args.userid;
+                    }
 
                     Game.findOneAndUpdate({ '_id': game.id },
                         updateObj, { new: true }, (err, doc) => {
                             socket.publish('CELLCLICK_GAME', {
                                 gameClicked: doc
+                            });
+                            if (completed) {
+                                socket.publish('END_GAME', {
+                                    gameEnd: doc
+                                });
+                            }
+                        });
+
+                });
+            }
+        },
+        surrenderGame: {
+            type: GameType,
+            args: {
+                userid: { type: new GraphQLNonNull(GraphQLString) },
+                id: { type: new GraphQLNonNull(GraphQLString) }
+            },
+            resolve(parent, args) {
+                Game.findOne({ '_id': args.id }).exec().then(game => {
+                    var isOwner = game.ownerId === args.userid;
+                    var winner = isOwner ? game.guestId : game.ownerId;
+                    var updateObj = { winnerId: winner, surrender: true };
+                    Game.findOneAndUpdate({ '_id': game.id },
+                        updateObj, { new: true }, (err, doc) => {
+                            console.log(doc);
+                            socket.publish('END_GAME', {
+                                gameEnd: doc
                             });
                         });
                 });
@@ -276,6 +327,10 @@ const Subscription = new GraphQLObjectType({
         gameClicked: {
             type: GameType,
             subscribe: () => socket.asyncIterator('CELLCLICK_GAME')
+        },
+        gameEnd: {
+            type: GameType,
+            subscribe: () => socket.asyncIterator('END_GAME')
         }
     }
 });
