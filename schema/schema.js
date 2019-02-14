@@ -134,6 +134,16 @@ const RootQuery = new GraphQLObjectType({
                 return User.findOne({ '_id': args.id });
             }
         },
+        login: {
+            type: UserType,
+            args: {
+                username: { type: new GraphQLNonNull(GraphQLString) },
+                password: { type: new GraphQLNonNull(GraphQLString) }
+            },
+            resolve(parent, args) {
+                return User.findOne({ 'username': args.username, 'password': args.password });
+            }
+        },
         users: {
             type: new GraphQLList(UserType),
             resolve(parent, args) {
@@ -173,12 +183,14 @@ const Mutation = new GraphQLObjectType({
         addUser: {
             type: UserType,
             args: {
-                username: { type: new GraphQLNonNull(GraphQLString) }
+                username: { type: new GraphQLNonNull(GraphQLString) },
+                password: { type: new GraphQLNonNull(GraphQLString) }
             },
             resolve(parent, args) {
                 return new Promise((resolve, reject) => {
                     let newUser = new User({
-                        username: args.username
+                        username: args.username,
+                        password: args.password,
                     });
                     newUser.save().then(data => {
                         socket.publish('ADD_USER', {
