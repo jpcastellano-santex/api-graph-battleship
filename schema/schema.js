@@ -298,7 +298,6 @@ const Mutation = new GraphQLObjectType({
                     var updateObj = { winnerId: winner, surrender: true };
                     Game.findOneAndUpdate({ '_id': game.id },
                         updateObj, { new: true }, (err, doc) => {
-                            console.log(doc);
                             socket.publish('END_GAME', {
                                 gameEnd: doc
                             });
