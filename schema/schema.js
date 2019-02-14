@@ -236,53 +236,56 @@ const Mutation = new GraphQLObjectType({
                 col: { type: new GraphQLNonNull(GraphQLInt) }
             },
             resolve(parent, args) {
-                Game.findOne({ '_id': args.id }).exec().then(game => {
-                    var isOwner = game.ownerId === args.userid;
-                    var boardname = isOwner ? 'guestBoard' : 'ownerBoard';
+                return new Promise((resolve, reject) => {
+                    Game.findOne({ '_id': args.id }).exec().then(game => {
+                        var isOwner = game.ownerId === args.userid;
+                        var boardname = isOwner ? 'guestBoard' : 'ownerBoard';
 
-                    var cellValue = game[boardname][args.row][args.col];
+                        var cellValue = game[boardname][args.row][args.col];
 
-                    var newCellValue = GameBoard.cellStatus.WATER;
-                    if (cellValue === GameBoard.cellStatus.WATER) {
-                        newCellValue = GameBoard.cellStatus.MISS;
-                    } else {
-                        newCellValue = GameBoard.cellStatus.HITTED;
-                    }
-                    game[boardname][args.row][args.col] = newCellValue;
-
-                    var nextuser = isOwner ? game.guestId : game.ownerId;
-                    var updateObj = { turnId: nextuser };
-                    updateObj[boardname] = game[boardname];
-
-                    var currentBoard = updateObj[boardname];
-                    var completed = true;
-
-                    for (let index = 0; index < currentBoard.length; index++) {
-                        const row = currentBoard[index];
-                        var incompleted = _.find(row, (o) => { return o > 0; });
-                        if (incompleted) {
-                            completed = false;
-                            break;
+                        var newCellValue = GameBoard.cellStatus.WATER;
+                        if (cellValue === GameBoard.cellStatus.WATER) {
+                            newCellValue = GameBoard.cellStatus.MISS;
+                        } else {
+                            newCellValue = GameBoard.cellStatus.HITTED;
                         }
-                    }
+                        game[boardname][args.row][args.col] = newCellValue;
 
-                    if (completed) {
-                        updateObj.winnerId = args.userid;
-                    }
+                        var nextuser = isOwner ? game.guestId : game.ownerId;
+                        var updateObj = { turnId: nextuser };
+                        updateObj[boardname] = game[boardname];
 
-                    Game.findOneAndUpdate({ '_id': game.id },
-                        updateObj, { new: true }, (err, doc) => {
-                            socket.publish('CELLCLICK_GAME', {
-                                gameClicked: doc
-                            });
-                            if (completed) {
-                                socket.publish('END_GAME', {
-                                    gameEnd: doc
-                                });
+                        var currentBoard = updateObj[boardname];
+                        var completed = true;
+
+                        for (let index = 0; index < currentBoard.length; index++) {
+                            const row = currentBoard[index];
+                            var incompleted = _.find(row, (o) => { return o > 0; });
+                            if (incompleted) {
+                                completed = false;
+                                break;
                             }
-                        });
+                        }
 
-                });
+                        if (completed) {
+                            updateObj.winnerId = args.userid;
+                        }
+
+                        Game.findOneAndUpdate({ '_id': game.id },
+                            updateObj, { new: true }, (err, doc) => {
+                                socket.publish('CELLCLICK_GAME', {
+                                    gameClicked: doc
+                                });
+                                if (completed) {
+                                    socket.publish('END_GAME', {
+                                        gameEnd: doc
+                                    });
+                                }
+                                resolve(doc);
+                            });
+
+                    });
+                }).catch(errors => reject(errors));
             }
         },
         surrenderGame: {
@@ -292,17 +295,20 @@ const Mutation = new GraphQLObjectType({
                 id: { type: new GraphQLNonNull(GraphQLString) }
             },
             resolve(parent, args) {
-                Game.findOne({ '_id': args.id }).exec().then(game => {
-                    var isOwner = game.ownerId === args.userid;
-                    var winner = isOwner ? game.guestId : game.ownerId;
-                    var updateObj = { winnerId: winner, surrender: true };
-                    Game.findOneAndUpdate({ '_id': game.id },
-                        updateObj, { new: true }, (err, doc) => {
-                            socket.publish('END_GAME', {
-                                gameEnd: doc
+                return new Promise((resolve, reject) => {
+                    Game.findOne({ '_id': args.id }).exec().then(game => {
+                        var isOwner = game.ownerId === args.userid;
+                        var winner = isOwner ? game.guestId : game.ownerId;
+                        var updateObj = { winnerId: winner, surrender: true };
+                        Game.findOneAndUpdate({ '_id': game.id },
+                            updateObj, { new: true }, (err, doc) => {
+                                socket.publish('END_GAME', {
+                                    gameEnd: doc
+                                });
+                                resolve(doc);
                             });
-                        });
-                });
+                    });
+                }).catch(errors => reject(errors));
             }
         }
     }
